@@ -1,6 +1,6 @@
 STAGE_DIR := build
 EXE := $(STAGE_DIR)/mw-proxy
-SRC := cmd/mw-proxy.go
+SRC := */*.go
 TAG ?= platform9/mw-proxy:latest
 
 $(STAGE_DIR):
