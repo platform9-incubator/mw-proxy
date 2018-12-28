@@ -26,6 +26,8 @@ var (
 	qbertUrl        string
 	bindAddr        string
 	fwdHostAndPort  string
+	servicesCidr    string
+	servicesNet     *net.IPNet
 	listenPort      int
 	ks              bouncer.Keystone
 	username        string
@@ -37,6 +39,7 @@ var (
 func main() {
 	var token string
 	flag.StringVar(&bindAddr, "bind", "0.0.0.0", "bind address")
+	flag.StringVar(&servicesCidr, "services-cidr", "10.21.0.0/16", "kubernetes services CIDR")
 	flag.StringVar(&fwdHostAndPort, "fwdaddr", "127.0.0.1:3020", "forwarder service host and port")
 	flag.StringVar(&token, "token", "",
 		"optional initial keystone token")
@@ -49,12 +52,16 @@ func main() {
 		usage()
 		os.Exit(1)
 	}
+	var err error
+	_, servicesNet, err = net.ParseCIDR(servicesCidr)
+	if err != nil {
+		logger.Fatal("invalid services-cidr:", err)
+	}
 	keystoneUrl = flag.Arg(0)
 	projectId = flag.Arg(1)
 	username = flag.Arg(2)
 	password = flag.Arg(3)
 	qbertUrl = flag.Arg(4)
-	var err error
 	ks, err = keystone.New(keystoneUrl, keystoneTimeout)
 	if err != nil {
 		logger.Fatal("failed to initialize keystone: ", err)
@@ -113,6 +120,16 @@ func handleConnection(cnx net.Conn) {
 	}
 	ip := components[0]
 	port := components[1]
+	ipAddr := net.ParseIP(ip)
+	if ipAddr == nil {
+		logger.Printf("[%s] malformed ip address: %s", cnxId, ip)
+		return
+	}
+	if servicesNet.Contains(ipAddr) {
+		logger.Printf("[%s] ip address %s within services network, aborting...",
+			cnxId, ip)
+		return
+	}
 	var uuid string
 	uuid, err = qb.NodeUuidForIp(cnxId, ip)
 	if err != nil {

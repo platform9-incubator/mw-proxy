@@ -1,3 +1,4 @@
+SHELL := bash
 STAGE_DIR := build
 EXE := $(STAGE_DIR)/mw-proxy
 SRC := */*.go
