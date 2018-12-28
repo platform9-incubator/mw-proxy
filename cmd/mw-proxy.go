@@ -31,7 +31,7 @@ var (
 	username        string
 	password        string
 	qb              qbert.Client
-	logger          = log.New(os.Stderr, "mw-proxy ", log.LstdFlags)
+	logger          = log.New(os.Stderr, "", log.LstdFlags)
 )
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 	var err error
 	ks, err = keystone.New(keystoneUrl, keystoneTimeout)
 	if err != nil {
-		log.Fatal("failed to initialize keystone: ", err)
+		logger.Fatal("failed to initialize keystone: ", err)
 	}
 	qb = qbert.Client{
 		Url:       qbertUrl,
@@ -83,31 +83,29 @@ func serve() {
 	addr := fmt.Sprintf("%s:%d", bindAddr, listenPort)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("failed to listen: %s", err)
+		logger.Fatalf("failed to listen: %s", err)
 	}
-	log.Printf("listening on %s", listener.Addr().String())
+	logger.Printf("listening on %s", listener.Addr().String())
 	for {
 		cnx, err := listener.Accept()
 		if err != nil {
-			log.Printf("warning: failed to accept: %s", err)
+			logger.Printf("warning: failed to accept: %s", err)
 			continue
 		}
 		go handleConnection(cnx)
 	}
 }
 
-func handleConnection(
-	cnx net.Conn,
-) {
+func handleConnection(cnx net.Conn) {
 	cnxId := proxylib.RandomString(8)
 	defer proxylib.CloseConnection(cnx, logger, cnxId, "inbound")
-	log.Printf("[%s] accepted local connection", cnxId)
-	netAddr, err := proxylib.OriginalDestination(&cnx)
+	logger.Printf("[%s] accepted local connection", cnxId)
+	netAddr, err := proxylib.OriginalDestination(cnxId, &cnx)
 	if err != nil {
-		log.Printf("[%s] failed to obtain original destination: %s", cnxId, err)
+		logger.Printf("[%s] failed to obtain original destination: %s", cnxId, err)
 		return
 	}
-	log.Printf("[%s] original destination: %s", cnxId, netAddr)
+	logger.Printf("[%s] original destination: %s", cnxId, netAddr)
 	components := strings.Split(netAddr, ":")
 	if len(components) != 2 {
 		logger.Printf("[%s] invalid destination: %s", cnxId, netAddr)
@@ -116,11 +114,12 @@ func handleConnection(
 	ip := components[0]
 	port := components[1]
 	var uuid string
-	uuid, err = qb.NodeUuidForIp(ip)
+	uuid, err = qb.NodeUuidForIp(cnxId, ip)
 	if err != nil {
 		logger.Printf("[%s] node lookup failed: %s", cnxId, err)
 		return
 	}
+	logger.Printf("[%s] node uuid: %s", cnxId, uuid)
 	tcpConn := cnx.(*net.TCPConn)
 	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn, uuid, port)
 }

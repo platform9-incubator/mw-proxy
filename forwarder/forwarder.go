@@ -23,11 +23,11 @@ func ProxyTo(
 ) {
 	req, err := http.NewRequest(
 		"GET",
-		"http://"+fwdHostAndPort,
+		"http://" + fwdHostAndPort,
 		nil,
 	)
 	if err != nil {
-		logger.Printf("%s failed to create request: %s", sid, err.Error())
+		logger.Printf("[%s] failed to create request: %s", sid, err.Error())
 		return
 	}
 	req.Header.Set("Connection", "Upgrade")
@@ -37,25 +37,29 @@ func ProxyTo(
 
 	cnx, err := net.Dial("tcp", fwdHostAndPort)
 	if err != nil {
-		logger.Printf("%s failed to dial: %s", sid, err.Error())
+		logger.Printf("[%s] failed to dial: %s", sid, err.Error())
 		return
 	}
+	defer proxylib.CloseConnection(cnx, logger, sid, "outbound")
 	netConn := cnx.(*net.TCPConn)
-	defer proxylib.CloseConnection(netConn, logger, sid, "outgoing")
 	if err := req.Write(netConn); err != nil {
-		logger.Printf("%s failed to write request: %s", sid, err.Error())
+		logger.Printf("[%s] failed to send upgrade request: %s",
+			sid, err.Error())
 		return
 	}
 	br := bufio.NewReaderSize(netConn, 8192)
 	resp, err := http.ReadResponse(br, req)
 	if err != nil {
-		logger.Printf("%s failed to read response: %s", sid, err.Error())
+		logger.Printf("[%s] failed to read upgrade response: %s",
+			sid, err.Error())
 		return
 	}
-	if resp.StatusCode != 101 {
-		logger.Printf("%s unexpected status code: %d", sid, resp.StatusCode)
+	defer proxylib.CloseConnection(resp.Body, logger, sid, "upgrade response")
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		logger.Printf("[%s] unexpected upgrade status code: %d",
+			sid, resp.StatusCode)
 		return
 	}
-	logger.Printf("%s connection established", sid)
+	logger.Printf("[%s] connection established", sid)
 	proxylib.FerryBytes(conn, netConn, sid, 0)
 }

@@ -30,11 +30,11 @@ type Node struct {
 	PrimaryIp string
 }
 
-var logger = log.New(os.Stderr, "qbert ", log.LstdFlags)
+var logger = log.New(os.Stderr, "", log.LstdFlags)
 
 //------------------------------------------------------------------------------
 
-func (cl *Client) refreshToken() error {
+func (cl *Client) refreshToken(cnxId string) error {
 	ktw, err := cl.Keystone.ProjectTokenFromCredentials(
 		cl.Username, cl.Password, cl.ProjectId,
 	)
@@ -42,7 +42,7 @@ func (cl *Client) refreshToken() error {
 		return fmt.Errorf("keystone request failed: %s", err)
 	}
 	cl.Token = ktw.TokenID
-	logger.Printf("refreshed token: %s", cl.Token)
+	logger.Printf("[%s] refreshed token: %s", cnxId, cl.Token)
 	return nil
 }
 
@@ -53,7 +53,7 @@ func (cl *Client) refreshToken() error {
 // A non-nil error is returned if an error occurs while refreshing the node
 // cache using qbert and keystone APIs, or if no error occurs but the node
 // is not found.
-func (cl *Client) NodeUuidForIp(ip string) (string, error) {
+func (cl *Client) NodeUuidForIp(cnxId string, ip string) (string, error) {
 	cl.mtx.Lock()
 	defer cl.mtx.Unlock()
 	if cl.ipToUuid != nil {
@@ -62,7 +62,7 @@ func (cl *Client) NodeUuidForIp(ip string) (string, error) {
 			return uuid, nil
 		}
 	}
-	if err := cl.refreshNodes(); err != nil {
+	if err := cl.refreshNodes(cnxId); err != nil {
 		return "", fmt.Errorf("refreshNodes() failed: %s", err)
 	}
 	uuid, ok := cl.ipToUuid[ip]
@@ -74,11 +74,12 @@ func (cl *Client) NodeUuidForIp(ip string) (string, error) {
 
 //------------------------------------------------------------------------------
 
-// refreshNodes must be called with cl.mtx locked
-func (cl *Client) refreshNodes() error {
+// refreshNodes updates the cl.ipToUuid cache, possibly making calls to Keystone
+// and Qbert as neeeded. Must be called with cl.mtx locked
+func (cl *Client) refreshNodes(cnxId string) error {
 	tokenRefreshed := false
 	if cl.Token == "" {
-		if err := cl.refreshToken(); err != nil {
+		if err := cl.refreshToken(cnxId); err != nil {
 			return err
 		}
 		tokenRefreshed = true
@@ -96,12 +97,12 @@ func (cl *Client) refreshNodes() error {
 	if err != nil {
 		return fmt.Errorf("failed to send 1st qbert request: %s", err)
 	}
-	defer proxylib.CloseConnection(resp.Body, logger, "1st", "response body")
+	defer proxylib.CloseConnection(resp.Body, logger, cnxId, "1st response body")
 	if resp.StatusCode == http.StatusUnauthorized {
 		if tokenRefreshed {
 			return fmt.Errorf("1st qbert responded with 401 despite token refresh")
 		}
-		if err := cl.refreshToken(); err != nil {
+		if err := cl.refreshToken(cnxId); err != nil {
 			return err
 		}
 		httpReq.Header.Set("X-Auth-Token", cl.Token)
@@ -109,7 +110,7 @@ func (cl *Client) refreshNodes() error {
 		if err != nil {
 			return fmt.Errorf("failed to send 2nd qbert request: %s", err)
 		}
-		defer proxylib.CloseConnection(resp.Body, logger, "2nd", "response body")
+		defer proxylib.CloseConnection(resp.Body, logger, cnxId, "2nd response body")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("qbert failure status: %d", resp.StatusCode)
@@ -118,7 +119,7 @@ func (cl *Client) refreshNodes() error {
 	if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
 		return fmt.Errorf("decoding qbert response: %s", err)
 	}
-	logger.Printf("nodes: %v", nodes)
+	logger.Printf("[%s] nodes: %v", cnxId, nodes)
 	cl.ipToUuid = make(map[string]string)
 	for _, node := range nodes {
 		cl.ipToUuid[node.PrimaryIp] = node.Uuid
