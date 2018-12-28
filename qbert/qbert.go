@@ -17,17 +17,19 @@ type Client struct {
 	Username  string
 	Password  string
 	ProjectId string
+	ClusterId string
 	Token     string
-	
-	mtx       sync.Mutex
-	ipToUuid  map[string]string
+
+	mtx      sync.Mutex
+	ipToUuid map[string]string
 }
 
 type Node struct {
-	Uuid      string
-	Status    string
-	Name      string
-	PrimaryIp string
+	Uuid        string
+	ClusterUuid string
+	Status      string
+	Name        string
+	PrimaryIp   string
 }
 
 var logger = log.New(os.Stderr, "", log.LstdFlags)
@@ -84,7 +86,7 @@ func (cl *Client) refreshNodes(cnxId string) error {
 		}
 		tokenRefreshed = true
 	}
-	url := cl.Url + "/v1/nodes"
+	url := cl.Url + "/v2/" + cl.ProjectId + "/nodes"
 	httpReq, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create http request: %s", err)
@@ -122,7 +124,10 @@ func (cl *Client) refreshNodes(cnxId string) error {
 	logger.Printf("[%s] nodes: %v", cnxId, nodes)
 	cl.ipToUuid = make(map[string]string)
 	for _, node := range nodes {
-		cl.ipToUuid[node.PrimaryIp] = node.Uuid
+		if node.ClusterUuid == cl.ClusterId {
+			cl.ipToUuid[node.PrimaryIp] = node.Uuid
+		}
 	}
+	logger.Printf("[%s] node map: %v", cnxId, cl.ipToUuid)
 	return nil
 }

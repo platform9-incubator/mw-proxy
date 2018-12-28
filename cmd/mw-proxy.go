@@ -22,6 +22,7 @@ const (
 var (
 	keystoneTimeout time.Duration
 	projectId       string
+	clusterId       string
 	keystoneUrl     string
 	qbertUrl        string
 	bindAddr        string
@@ -48,7 +49,7 @@ func main() {
 	flag.DurationVar(&keystoneTimeout, "keystone-timeout", defaultKeystoneTimeout,
 		"The `duration` to wait for a response from Keystone")
 	flag.Parse()
-	if flag.NArg() != 5 {
+	if flag.NArg() != 6 {
 		usage()
 		os.Exit(1)
 	}
@@ -62,6 +63,7 @@ func main() {
 	username = flag.Arg(2)
 	password = flag.Arg(3)
 	qbertUrl = flag.Arg(4)
+	clusterId = flag.Arg(5)
 	ks, err = keystone.New(keystoneUrl, keystoneTimeout)
 	if err != nil {
 		logger.Fatal("failed to initialize keystone: ", err)
@@ -72,6 +74,7 @@ func main() {
 		Username:  username,
 		Password:  password,
 		ProjectId: projectId,
+		ClusterId: clusterId,
 		Token:     token,
 	}
 	serve()
@@ -80,7 +83,7 @@ func main() {
 func usage() {
 	cmd := os.Args[0]
 	msg := `Master-worker proxy.
-Usage: %s [OPTIONS] keystone-url project-id username password qbert-url
+Usage: %s [OPTIONS] keystone-url project-id username password qbert-url cluster-id
 `
 	fmt.Printf(msg, cmd)
 	flag.PrintDefaults()
