@@ -5,11 +5,13 @@ import (
 	"bouncer/keystone"
 	"flag"
 	"fmt"
+	"github.com/platform9-incubator/mw-proxy/forwarder"
 	"github.com/platform9-incubator/mw-proxy/qbert"
 	"github.com/platform9/proxylib/pkg/proxylib"
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -23,6 +25,7 @@ var (
 	keystoneUrl     string
 	qbertUrl        string
 	bindAddr        string
+	fwdHostAndPort  string
 	listenPort      int
 	ks              bouncer.Keystone
 	username        string
@@ -33,9 +36,8 @@ var (
 
 func main() {
 	var token string
-	var ip string
 	flag.StringVar(&bindAddr, "bind", "0.0.0.0", "bind address")
-	flag.StringVar(&ip, "ip", "0.0.0.0", "node ip address to lookup")
+	flag.StringVar(&fwdHostAndPort, "fwdaddr", "127.0.0.1:3020", "forwarder service host and port")
 	flag.StringVar(&token, "token", "",
 		"optional initial keystone token")
 	flag.IntVar(&listenPort, "port", 0,
@@ -65,12 +67,6 @@ func main() {
 		ProjectId: projectId,
 		Token:     token,
 	}
-	uuid, err := qb.NodeUuidForIp(ip)
-	if err != nil {
-		log.Fatal("failed to get node list: ", err)
-	}
-	log.Print("node uuid: ", uuid)
-	os.Exit(0)
 	serve()
 }
 
@@ -112,4 +108,19 @@ func handleConnection(
 		return
 	}
 	log.Printf("[%s] original destination: %s", cnxId, netAddr)
+	components := strings.Split(netAddr, ":")
+	if len(components) != 2 {
+		logger.Printf("[%s] invalid destination: %s", cnxId, netAddr)
+		return
+	}
+	ip := components[0]
+	port := components[1]
+	var uuid string
+	uuid, err = qb.NodeUuidForIp(ip)
+	if err != nil {
+		logger.Printf("[%s] node lookup failed: %s", cnxId, err)
+		return
+	}
+	tcpConn := cnx.(*net.TCPConn)
+	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn, uuid, port)
 }
