@@ -29,6 +29,8 @@ var (
 	fwdHostAndPort  string
 	servicesCidr    string
 	servicesNet     *net.IPNet
+	containersCidr  string
+	containersNet   *net.IPNet
 	listenPort      int
 	ks              bouncer.Keystone
 	username        string
@@ -41,6 +43,7 @@ func main() {
 	var token string
 	flag.StringVar(&bindAddr, "bind", "0.0.0.0", "bind address")
 	flag.StringVar(&servicesCidr, "services-cidr", "10.21.0.0/16", "kubernetes services CIDR")
+	flag.StringVar(&containersCidr, "containers-cidr", "10.20.0.0/16", "kubernetes containers CIDR")
 	flag.StringVar(&fwdHostAndPort, "fwdaddr", "127.0.0.1:3020", "forwarder service host and port")
 	flag.StringVar(&token, "token", "",
 		"optional initial keystone token")
@@ -57,6 +60,10 @@ func main() {
 	_, servicesNet, err = net.ParseCIDR(servicesCidr)
 	if err != nil {
 		logger.Fatal("invalid services-cidr:", err)
+	}
+	_, containersNet, err = net.ParseCIDR(containersCidr)
+	if err != nil {
+		logger.Fatal("invalid containers-cidr:", err)
 	}
 	keystoneUrl = flag.Arg(0)
 	projectId = flag.Arg(1)
@@ -130,6 +137,11 @@ func handleConnection(cnx net.Conn) {
 	}
 	if servicesNet.Contains(ipAddr) {
 		logger.Printf("[%s] ip address %s within services network, aborting...",
+			cnxId, ip)
+		return
+	}
+	if containersNet.Contains(ipAddr) {
+		logger.Printf("[%s] ip address %s within containers network, aborting...",
 			cnxId, ip)
 		return
 	}
