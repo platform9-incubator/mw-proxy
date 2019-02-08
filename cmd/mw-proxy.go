@@ -135,23 +135,33 @@ func handleConnection(cnx net.Conn) {
 		logger.Printf("[%s] malformed ip address: %s", cnxId, ip)
 		return
 	}
-	if servicesNet.Contains(ipAddr) {
-		logger.Printf("[%s] ip address %s within services network, aborting...",
-			cnxId, ip)
-		return
-	}
-	if containersNet.Contains(ipAddr) {
-		logger.Printf("[%s] ip address %s within containers network, aborting...",
-			cnxId, ip)
-		return
-	}
+	var destHost string
 	var uuid string
-	uuid, err = qb.NodeUuidForIp(cnxId, ip)
-	if err != nil {
-		logger.Printf("[%s] node lookup failed: %s", cnxId, err)
-		return
+	if servicesNet.Contains(ipAddr) {
+		if uuid, err = qb.RandomNodeUuid(cnxId); err != nil {
+			f := "[%s] ip address %s within services network, but failed to get random node: %s"
+			logger.Printf(f, cnxId, ip, err)
+		}
+		logger.Printf("[%s] ip address %s within services network, using node %s",
+			cnxId, ip)
+		destHost = ipAddr.String()
+	} else if containersNet.Contains(ipAddr) {
+		if uuid, err = qb.RandomNodeUuid(cnxId); err != nil {
+			f := "[%s] ip address %s within containers network, but failed to get random node: %s"
+			logger.Printf(f, cnxId, ip, err)
+		}
+		logger.Printf("[%s] ip address %s within containers network, using node %s",
+			cnxId, ip)
+		destHost = ipAddr.String()
+	} else {
+		uuid, err = qb.NodeUuidForIp(cnxId, ip)
+		if err != nil {
+			logger.Printf("[%s] node lookup failed: %s", cnxId, err)
+			return
+		}
+		logger.Printf("[%s] node uuid: %s", cnxId, uuid)
 	}
-	logger.Printf("[%s] node uuid: %s", cnxId, uuid)
 	tcpConn := cnx.(*net.TCPConn)
-	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn, uuid, port)
+	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn,
+		uuid, port, destHost)
 }

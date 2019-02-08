@@ -20,6 +20,7 @@ func ProxyTo(
 	conn *net.TCPConn,
 	hostId,
 	hostPort string,
+	destHost string,
 ) {
 	req, err := http.NewRequest(
 		"GET",
@@ -34,6 +35,9 @@ func ProxyTo(
 	req.Header.Set("Upgrade", "platform9.com/forwarder.dynamic.v2")
 	req.Header.Set("hostid", hostId)
 	req.Header.Set("hostlocalport", hostPort)
+	if destHost != "" {
+		req.Header.Set("destinationhost", destHost)
+	}
 
 	cnx, err := net.Dial("tcp", fwdHostAndPort)
 	if err != nil {

@@ -21,7 +21,9 @@ type Client struct {
 	Token     string
 
 	mtx      sync.Mutex
+	nodeUuids []string
 	ipToUuid map[string]string
+	nodeIndex uint16
 }
 
 type Node struct {
@@ -76,6 +78,26 @@ func (cl *Client) NodeUuidForIp(cnxId string, ip string) (string, error) {
 
 //------------------------------------------------------------------------------
 
+// RandomNodeUuid returns a "randomly" selected node uuid.
+// The current implementation just uses a round-robin index counter.
+func (cl *Client) RandomNodeUuid(cnxId string) (string, error) {
+	cl.mtx.Lock()
+	defer cl.mtx.Unlock()
+	if cl.ipToUuid == nil {
+		if err := cl.refreshNodes(cnxId); err != nil {
+			return "", fmt.Errorf("refreshNodes() failed: %s", err)
+		}
+	}
+	if len(cl.nodeUuids) == 0 {
+		return "", fmt.Errorf("there are no nodes in the cache")
+	}
+	i := int(cl.nodeIndex) % len(cl.nodeUuids)
+	cl.nodeIndex += 1
+	return cl.nodeUuids[i], nil
+}
+
+//------------------------------------------------------------------------------
+
 // refreshNodes updates the cl.ipToUuid cache, possibly making calls to Keystone
 // and Qbert as neeeded. Must be called with cl.mtx locked
 func (cl *Client) refreshNodes(cnxId string) error {
@@ -122,9 +144,11 @@ func (cl *Client) refreshNodes(cnxId string) error {
 		return fmt.Errorf("decoding qbert response: %s", err)
 	}
 	logger.Printf("[%s] nodes: %v", cnxId, nodes)
+	cl.nodeUuids = []string{}
 	cl.ipToUuid = make(map[string]string)
 	for _, node := range nodes {
 		if node.ClusterUuid == cl.ClusterId {
+			cl.nodeUuids = append(cl.nodeUuids, node.Uuid)
 			cl.ipToUuid[node.PrimaryIp] = node.Uuid
 		}
 	}
