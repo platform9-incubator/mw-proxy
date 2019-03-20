@@ -143,7 +143,7 @@ func handleConnection(cnx net.Conn) {
 			logger.Printf(f, cnxId, ip, err)
 		}
 		logger.Printf("[%s] ip address %s within services network, using node %s",
-			cnxId, ip)
+			cnxId, ip, uuid)
 		destHost = ipAddr.String()
 	} else if containersNet.Contains(ipAddr) {
 		if uuid, err = qb.RandomNodeUuid(cnxId); err != nil {
@@ -151,7 +151,7 @@ func handleConnection(cnx net.Conn) {
 			logger.Printf(f, cnxId, ip, err)
 		}
 		logger.Printf("[%s] ip address %s within containers network, using node %s",
-			cnxId, ip)
+			cnxId, ip, uuid)
 		destHost = ipAddr.String()
 	} else {
 		uuid, err = qb.NodeUuidForIp(cnxId, ip)
