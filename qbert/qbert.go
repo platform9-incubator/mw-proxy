@@ -37,9 +37,22 @@ type Node struct {
 var logger = log.New(os.Stderr, "", log.LstdFlags)
 
 //------------------------------------------------------------------------------
+// InvalidateCache sets nodeUuids and ipToUuid to nil
+// If a node's IP changes, or a node is detached from the cluster, and/or gets
+// re-attached with a different UUID, then the cache may contain invalid
+// information, resulting in failed connections:
+// For more information, see https://platform9.atlassian.net/browse/KPLAN-133
+func (cl *Client) InvalidateCache() {
+	cl.mtx.Lock()
+	defer cl.mtx.Unlock()
+	cl.nodeUuids = nil
+	cl.ipToUuid = nil
+}
+
+//------------------------------------------------------------------------------
 
 func (cl *Client) refreshToken(cnxId string) error {
-	ktw, err := cl.Keystone.ProjectTokenFromCredentials(
+	ktw, err := cl.Keystone.ProjectTokenFromCredentialsWithProjectId(
 		cl.Username, cl.Password, cl.ProjectId,
 	)
 	if err != nil {

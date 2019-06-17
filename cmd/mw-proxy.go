@@ -11,16 +11,19 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
 	defaultKeystoneTimeout = time.Duration(30) * time.Second
+	defaultCacheTtl = time.Duration(180) * time.Second
 )
 
 var (
 	keystoneTimeout time.Duration
+	cacheTtl        time.Duration
 	projectId       string
 	clusterId       string
 	keystoneUrl     string
@@ -40,6 +43,11 @@ var (
 )
 
 func main() {
+	var err error
+	s, err := strconv.Atoi(os.Getenv("CACHE_TTL_SECONDS"))
+	if err == nil {
+		cacheTtl = time.Duration(s) * time.Second
+	}
 	var token string
 	flag.StringVar(&bindAddr, "bind", "0.0.0.0", "bind address")
 	flag.StringVar(&servicesCidr, "services-cidr", "10.21.0.0/16", "kubernetes services CIDR")
@@ -50,13 +58,14 @@ func main() {
 	flag.IntVar(&listenPort, "port", 0,
 		"listening port (default: dynamic port)")
 	flag.DurationVar(&keystoneTimeout, "keystone-timeout", defaultKeystoneTimeout,
-		"The `duration` to wait for a response from Keystone")
+		"The `duration` (e.g. 50s) to wait for a response from Keystone")
+	flag.DurationVar(&cacheTtl, "cache-ttl", defaultCacheTtl,
+		"The `duration` (e.g. 50s) to wait before invalidating the cache holding the mapping from IPs to Node UUIDs")
 	flag.Parse()
 	if flag.NArg() != 6 {
 		usage()
 		os.Exit(1)
 	}
-	var err error
 	_, servicesNet, err = net.ParseCIDR(servicesCidr)
 	if err != nil {
 		logger.Fatal("invalid services-cidr:", err)
@@ -84,6 +93,7 @@ func main() {
 		ClusterId: clusterId,
 		Token:     token,
 	}
+	go invalidateCachePeriodically(cacheTtl, &qb)
 	serve()
 }
 
@@ -164,4 +174,17 @@ func handleConnection(cnx net.Conn) {
 	tcpConn := cnx.(*net.TCPConn)
 	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn,
 		uuid, port, destHost)
+}
+
+func invalidateCachePeriodically(duration time.Duration, qb * qbert.Client) {
+	logger.Println("Invalidating cache every", duration)
+	timer := time.NewTimer(duration)
+	for {
+		select {
+		case <- timer.C:
+			logger.Println("Timer up, invalidating cache")
+			qb.InvalidateCache()
+			timer.Reset(duration)
+		}
+	}
 }
