@@ -17,6 +17,7 @@ import (
 
 const (
 	defaultKeystoneTimeout = time.Duration(30) * time.Second
+	defaultCacheValidTime = time.Duration(5) * time.Minute
 )
 
 var (
@@ -84,6 +85,7 @@ func main() {
 		ClusterId: clusterId,
 		Token:     token,
 	}
+	go invalidateCachePeriodically(defaultCacheValidTime, &qb)
 	serve()
 }
 
@@ -164,4 +166,17 @@ func handleConnection(cnx net.Conn) {
 	tcpConn := cnx.(*net.TCPConn)
 	forwarder.ProxyTo(cnxId, logger, fwdHostAndPort, tcpConn,
 		uuid, port, destHost)
+}
+
+func invalidateCachePeriodically(duration time.Duration, qb * qbert.Client) {
+	logger.Println("Invalidating cache every", duration)
+	timer := time.NewTimer(duration)
+	for {
+		select {
+		case <- timer.C:
+			logger.Println("Timer up, invalidating cache")
+			qb.InvalidateCache()
+			timer.Reset(duration)
+		}
+	}
 }

@@ -37,6 +37,15 @@ type Node struct {
 var logger = log.New(os.Stderr, "", log.LstdFlags)
 
 //------------------------------------------------------------------------------
+// InvalidateCache sets nodeUuids and ipToUuid to nil
+func (cl *Client) InvalidateCache() {
+	cl.mtx.Lock()
+	defer cl.mtx.Unlock()
+	cl.nodeUuids = nil
+	cl.ipToUuid = nil
+}
+
+//------------------------------------------------------------------------------
 
 func (cl *Client) refreshToken(cnxId string) error {
 	ktw, err := cl.Keystone.ProjectTokenFromCredentials(
