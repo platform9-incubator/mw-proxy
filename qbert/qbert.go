@@ -48,7 +48,7 @@ func (cl *Client) InvalidateCache() {
 //------------------------------------------------------------------------------
 
 func (cl *Client) refreshToken(cnxId string) error {
-	ktw, err := cl.Keystone.ProjectTokenFromCredentials(
+	ktw, err := cl.Keystone.ProjectTokenFromCredentialsWithProjectId(
 		cl.Username, cl.Password, cl.ProjectId,
 	)
 	if err != nil {
