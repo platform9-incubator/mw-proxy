@@ -182,7 +182,6 @@ func invalidateCachePeriodically(duration time.Duration, qb * qbert.Client) {
 	for {
 		select {
 		case <- timer.C:
-			logger.Println("Timer up, invalidating cache")
 			qb.InvalidateCache()
 			timer.Reset(duration)
 		}

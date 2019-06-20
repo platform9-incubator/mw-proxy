@@ -45,6 +45,10 @@ var logger = log.New(os.Stderr, "", log.LstdFlags)
 func (cl *Client) InvalidateCache() {
 	cl.mtx.Lock()
 	defer cl.mtx.Unlock()
+	if cl.nodeUuids == nil && cl.ipToUuid == nil {
+		return
+	}
+	logger.Println("Invalidating cache")
 	cl.nodeUuids = nil
 	cl.ipToUuid = nil
 }
